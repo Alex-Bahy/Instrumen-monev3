@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instrumen Monitoring dan Evaluasi - SMP Negeri 38 Maluku Tengah</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-shadow {
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Google Sheets Configuration
+        const SHEET_ID = '1rCQKqknWFLz3dzl_zokATkUj8OITXjBikicn_GnaLU4';
+        const ADMIN_PASSWORD = 'SMPN38MT';
+
+        // Komponen untuk menampilkan notifikasi
+        const Toast = ({ message, type, onClose }) => {
+            useEffect(() => {
+                const timer = setTimeout(() => {
+                    onClose();
+                }, 3000);
+                return () => clearTimeout(timer);
+            }, []);
+
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+            return (
+                <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in`}>
+                    {message}
+                </div>
+            );
+        };
+
+        // Komponen Form Evaluasi
+        const FormEvaluasi = ({ onSubmitSuccess }) => {
+            const [formData, setFormData] = useState({
+                tanggal: new Date().toISOString().split('T')[0],
+                role: '', // Role user (siswa, guru, komite, pimpinan, dll)
+                namaEvaluator: '',
+                // Field khusus untuk siswa
+                kelas: '',
+                // Field khusus untuk guru
+                mataPelajaran: '',
+                // Field untuk role lainnya
+                jabatan: '',
+                aspek1: 0, // Penerapan Visi dan Misi dalam Pembelajaran
+                aspek2: 0, // Keselarasan Kurikulum dengan Visi Misi
+                aspek3: 0, // Metode Pembelajaran Mendalam
+                aspek4: 0, // Pengembangan Kompetensi Siswa
+                aspek5: 0, // Penilaian Autentik
+                aspek6: 0, // Sarana dan Prasarana
+                aspek7: 0, // Keterlibatan Stakeholder
+                aspek8: 0, // Budaya Sekolah
+                catatan: ''
+            });
+
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
+            const aspekPenilaian = [
+                {
+                    key: 'aspek1',
+                    label: 'Penerapan Visi dan Misi dalam Pembelajaran',
+                    deskripsi: 'Sejauh mana visi dan misi sekolah diintegrasikan dalam proses pembelajaran sehari-hari'
+                },
+                {
+                    key: 'aspek2',
+                    label: 'Keselarasan Kurikulum dengan Visi Misi',
+                    deskripsi: 'Kesesuaian antara kurikulum yang diterapkan dengan visi misi sekolah'
+                },
+                {
+                    key: 'aspek3',
+                    label: 'Metode Pembelajaran Mendalam (Deep Learning)',
+                    deskripsi: 'Penerapan strategi pembelajaran yang mendorong pemahaman mendalam siswa'
+                },
+                {
+                    key: 'aspek4',
+                    label: 'Pengembangan Kompetensi Siswa',
+                    deskripsi: 'Upaya mengembangkan kompetensi akademik dan non-akademik siswa'
+                },
+                {
+                    key: 'aspek5',
+                    label: 'Penilaian Autentik',
+                    deskripsi: 'Sistem penilaian yang mengukur pemahaman mendalam dan kompetensi siswa secara menyeluruh'
+                },
+                {
+                    key: 'aspek6',
+                    label: 'Sarana dan Prasarana Pembelajaran',
+                    deskripsi: 'Ketersediaan dan pemanfaatan sarana prasarana untuk mendukung pembelajaran mendalam'
+                },
+                {
+                    key: 'aspek7',
+                    label: 'Keterlibatan Stakeholder',
+                    deskripsi: 'Partisipasi aktif guru, siswa, orang tua dalam mewujudkan visi misi'
+                },
+                {
+                    key: 'aspek8',
+                    label: 'Budaya Sekolah',
+                    deskripsi: 'Iklim sekolah yang mendukung tercapainya visi misi melalui pembelajaran mendalam'
+                }
+            ];
+
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({
+                    ...prev,
+                    [name]: value
+                }));
+            };
+
+            const handleRatingChange = (aspek, nilai) => {
+                setFormData(prev => ({
+                    ...prev,
+                    [aspek]: parseInt(nilai)
+                }));
+            };
+
+            const hitungTotalSkor = () => {
+                const totalAspek = aspekPenilaian.length;
+                const totalNilai = aspekPenilaian.reduce((sum, aspek) => sum + formData[aspek.key], 0);
+                const maksimalSkor = totalAspek * 5;
+                const persentase = (totalNilai / maksimalSkor * 100).toFixed(2);
+                return { totalNilai, maksimalSkor, persentase };
+            };
+
+            const getKategori = (persentase) => {
+                if (persentase >= 85) return 'Sangat Baik';
+                if (persentase >= 70) return 'Baik';
+                if (persentase >= 55) return 'Cukup';
+                if (persentase >= 40) return 'Kurang';
+                return 'Sangat Kurang';
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                
+                // Validasi berdasarkan role
+                if (!formData.namaEvaluator || !formData.role) {
+                    alert('Mohon lengkapi nama dan pilih role Anda');
+                    return;
+                }
+
+                // Validasi tambahan berdasarkan role
+                if (formData.role === 'siswa' && !formData.kelas) {
+                    alert('Mohon pilih kelas Anda');
+                    return;
+                }
+
+                if (formData.role === 'guru' && !formData.mataPelajaran) {
+                    alert('Mohon masukkan mata pelajaran yang Anda ajar');
+                    return;
+                }
+
+                if (['kepala_sekolah', 'wakil_kepala', 'pengawas', 'tim_monev', 'lainnya'].includes(formData.role) && !formData.jabatan) {
+                    alert('Mohon masukkan jabatan Anda');
+                    return;
+                }
+
+                const { totalNilai, maksimalSkor, persentase } = hitungTotalSkor();
+                const kategori = getKategori(persentase);
+
+                setIsSubmitting(true);
+
+                try {
+                    // Buat display name berdasarkan role
+                    let displayRole = '';
+                    let additionalInfo = '';
+                    
+                    switch(formData.role) {
+                        case 'siswa':
+                            displayRole = 'Siswa';
+                            additionalInfo = formData.kelas;
+                            break;
+                        case 'guru':
+                            displayRole = 'Guru';
+                            additionalInfo = formData.mataPelajaran;
+                            break;
+                        case 'komite':
+                            displayRole = 'Komite Sekolah';
+                            additionalInfo = '-';
+                            break;
+                        case 'kepala_sekolah':
+                            displayRole = 'Kepala Sekolah';
+                            additionalInfo = formData.jabatan;
+                            break;
+                        case 'wakil_kepala':
+                            displayRole = 'Wakil Kepala Sekolah';
+                            additionalInfo = formData.jabatan;
+                            break;
+                        case 'pengawas':
+                            displayRole = 'Pengawas';
+                            additionalInfo = formData.jabatan;
+                            break;
+                        case 'tim_monev':
+                            displayRole = 'Tim Monev';
+                            additionalInfo = formData.jabatan;
+                            break;
+                        case 'lainnya':
+                            displayRole = 'Lainnya';
+                            additionalInfo = formData.jabatan;
+                            break;
+                    }
+
+                    const dataToSubmit = {
+                        timestamp: new Date().toISOString(),
+                        tanggal: formData.tanggal,
+                        namaEvaluator: formData.namaEvaluator,
+                        role: displayRole,
+                        kelas: formData.kelas || '-',
+                        mataPelajaran: formData.mataPelajaran || '-',
+                        jabatan: formData.jabatan || '-',
+                        additionalInfo: additionalInfo,
+                        aspek1: formData.aspek1,
+                        aspek2: formData.aspek2,
+                        aspek3: formData.aspek3,
+                        aspek4: formData.aspek4,
+                        aspek5: formData.aspek5,
+                        aspek6: formData.aspek6,
+                        aspek7: formData.aspek7,
+                        aspek8: formData.aspek8,
+                        totalSkor: totalNilai,
+                        maksimalSkor: maksimalSkor,
+                        persentase: persentase,
+                        kategori: kategori,
+                        catatan: formData.catatan
+                    };
+
+                    // Simulasi submit ke Google Sheets
+                    // Dalam implementasi nyata, gunakan Google Apps Script Web App atau Google Sheets API
+                    console.log('Data yang akan dikirim:', dataToSubmit);
+                    
+                    // Simulasi delay
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+
+                    onSubmitSuccess({
+                        message: `Data berhasil disimpan! Skor: ${persentase}% (${kategori})`,
+                        type: 'success'
+                    });
+
+                    // Reset form
+                    setFormData({
+                        tanggal: new Date().toISOString().split('T')[0],
+                        role: '',
+                        namaEvaluator: '',
+                        kelas: '',
+                        mataPelajaran: '',
+                        jabatan: '',
+                        aspek1: 0,
+                        aspek2: 0,
+                        aspek3: 0,
+                        aspek4: 0,
+                        aspek5: 0,
+                        aspek6: 0,
+                        aspek7: 0,
+                        aspek8: 0,
+                        catatan: ''
+                    });
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    onSubmitSuccess({
+                        message: 'Gagal menyimpan data. Silakan coba lagi.',
+                        type: 'error'
+                    });
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const { totalNilai, maksimalSkor, persentase } = hitungTotalSkor();
+            const kategori = getKategori(persentase);
+
+            return (
+                <div className="max-w-5xl mx-auto">
+                    <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+                        <div className="gradient-bg text-white p-6 rounded-xl mb-6">
+                            <h2 className="text-2xl font-bold mb-2">Instrumen Monitoring dan Evaluasi</h2>
+                            <p className="text-white/90">Penyelarasan Visi dan Misi dengan Pembelajaran Mendalam</p>
+                            <p className="text-sm text-white/80 mt-2">SMP Negeri 38 Maluku Tengah</p>
+                        </div>
+
+                        <form onSubmit={handleSubmit}>
+                            {/* Informasi Evaluator */}
+                            <div className="mb-8">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">Informasi Evaluator</h3>
+                                
+                                {/* Row 1: Tanggal dan Role */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Tanggal <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            name="tanggal"
+                                            value={formData.tanggal}
+                                            onChange={handleInputChange}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Saya adalah <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="role"
+                                            value={formData.role}
+                                            onChange={handleInputChange}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                            required
+                                        >
+                                            <option value="">-- Pilih Role Anda --</option>
+                                            <option value="siswa">👨‍🎓 Siswa</option>
+                                            <option value="guru">👨‍🏫 Guru</option>
+                                            <option value="komite">👔 Komite Sekolah</option>
+                                            <option value="kepala_sekolah">🎓 Kepala Sekolah</option>
+                                            <option value="wakil_kepala">📋 Wakil Kepala Sekolah</option>
+                                            <option value="pengawas">🔍 Pengawas</option>
+                                            <option value="tim_monev">📊 Tim Monitoring & Evaluasi</option>
+                                            <option value="lainnya">➕ Lainnya</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Nama */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Nama Lengkap <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="namaEvaluator"
+                                        value={formData.namaEvaluator}
+                                        onChange={handleInputChange}
+                                        placeholder="Masukkan nama lengkap Anda"
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        required
+                                    />
+                                </div>
+
+                                {/* Row 3: Field Dinamis berdasarkan Role */}
+                                {formData.role && (
+                                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                                        {/* Field untuk SISWA */}
+                                        {formData.role === 'siswa' && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Kelas <span className="text-red-500">*</span>
+                                                </label>
+                                                <select
+                                                    name="kelas"
+                                                    value={formData.kelas}
+                                                    onChange={handleInputChange}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                                                    required
+                                                >
+                                                    <option value="">-- Pilih Kelas --</option>
+                                                    <option value="VII A">VII A</option>
+                                                    <option value="VII B">VII B</option>
+                                                    <option value="VII C">VII C</option>
+                                                    <option value="VII D">VII D</option>
+                                                    <option value="VIII A">VIII A</option>
+                                                    <option value="VIII B">VIII B</option>
+                                                    <option value="VIII C">VIII C</option>
+                                                    <option value="VIII D">VIII D</option>
+                                                    <option value="IX A">IX A</option>
+                                                    <option value="IX B">IX B</option>
+                                                    <option value="IX C">IX C</option>
+                                                    <option value="IX D">IX D</option>
+                                                </select>
+                                            </div>
+                                        )}
+
+                                        {/* Field untuk GURU */}
+                                        {formData.role === 'guru' && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Mata Pelajaran yang Diampu <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="mataPelajaran"
+                                                    value={formData.mataPelajaran}
+                                                    onChange={handleInputChange}
+                                                    placeholder="Contoh: Matematika, IPA, Bahasa Indonesia"
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+
+                                        {/* Field untuk KOMITE */}
+                                        {formData.role === 'komite' && (
+                                            <div className="text-sm text-blue-700">
+                                                <p>✓ Terima kasih atas partisipasi Anda sebagai anggota Komite Sekolah dalam evaluasi ini.</p>
+                                            </div>
+                                        )}
+
+                                        {/* Field untuk PIMPINAN dan LAINNYA */}
+                                        {['kepala_sekolah', 'wakil_kepala', 'pengawas', 'tim_monev', 'lainnya'].includes(formData.role) && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Jabatan/Posisi <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="jabatan"
+                                                    value={formData.jabatan}
+                                                    onChange={handleInputChange}
+                                                    placeholder={
+                                                        formData.role === 'wakil_kepala' ? 'Contoh: Wakasek Kurikulum, Wakasek Kesiswaan' :
+                                                        formData.role === 'tim_monev' ? 'Contoh: Ketua Tim Monev, Anggota Tim Monev' :
+                                                        'Masukkan jabatan/posisi Anda'
+                                                    }
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                                                    required
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Aspek Penilaian */}
+                            <div className="mb-8">
+                                <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">Aspek Penilaian</h3>
+                                <p className="text-sm text-gray-600 mb-6">
+                                    Skala Penilaian: 1 (Sangat Kurang) - 2 (Kurang) - 3 (Cukup) - 4 (Baik) - 5 (Sangat Baik)
+                                </p>
+
+                                {aspekPenilaian.map((aspek, index) => (
+                                    <div key={aspek.key} className="mb-6 p-5 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div className="mb-3">
+                                            <h4 className="font-semibold text-gray-800 mb-1">
+                                                {index + 1}. {aspek.label}
+                                            </h4>
+                                            <p className="text-sm text-gray-600">{aspek.deskripsi}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            {[1, 2, 3, 4, 5].map((nilai) => (
+                                                <label key={nilai} className="flex items-center cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name={aspek.key}
+                                                        value={nilai}
+                                                        checked={formData[aspek.key] === nilai}
+                                                        onChange={(e) => handleRatingChange(aspek.key, e.target.value)}
+                                                        className="w-5 h-5 text-purple-600 focus:ring-purple-500"
+                                                    />
+                                                    <span className="ml-2 text-sm font-medium text-gray-700">{nilai}</span>
+                                                </label>
+                                            ))}
+                                            <span className={`ml-4 px-3 py-1 rounded-full text-sm font-medium ${
+                                                formData[aspek.key] === 0 ? 'bg-gray-200 text-gray-600' :
+                                                formData[aspek.key] <= 2 ? 'bg-red-100 text-red-700' :
+                                                formData[aspek.key] === 3 ? 'bg-yellow-100 text-yellow-700' :
+                                                formData[aspek.key] === 4 ? 'bg-blue-100 text-blue-700' :
+                                                'bg-green-100 text-green-700'
+                                            }`}>
+                                                {formData[aspek.key] === 0 ? 'Belum dinilai' :
+                                                 formData[aspek.key] <= 2 ? 'Kurang' :
+                                                 formData[aspek.key] === 3 ? 'Cukup' :
+                                                 formData[aspek.key] === 4 ? 'Baik' :
+                                                 'Sangat Baik'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Skor Total */}
+                            <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border-2 border-purple-200">
+                                <h3 className="text-lg font-semibold mb-3 text-gray-800">Hasil Evaluasi</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="bg-white p-4 rounded-lg">
+                                        <p className="text-sm text-gray-600 mb-1">Total Skor</p>
+                                        <p className="text-2xl font-bold text-purple-600">{totalNilai}/{maksimalSkor}</p>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-lg">
+                                        <p className="text-sm text-gray-600 mb-1">Persentase</p>
+                                        <p className="text-2xl font-bold text-blue-600">{persentase}%</p>
+                                    </div>
+                                    <div className="bg-white p-4 rounded-lg md:col-span-2">
+                                        <p className="text-sm text-gray-600 mb-1">Kategori</p>
+                                        <p className={`text-2xl font-bold ${
+                                            kategori === 'Sangat Baik' ? 'text-green-600' :
+                                            kategori === 'Baik' ? 'text-blue-600' :
+                                            kategori === 'Cukup' ? 'text-yellow-600' :
+                                            'text-red-600'
+                                        }`}>
+                                            {kategori}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Catatan */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Catatan dan Rekomendasi
+                                </label>
+                                <textarea
+                                    name="catatan"
+                                    value={formData.catatan}
+                                    onChange={handleInputChange}
+                                    rows="4"
+                                    placeholder="Tuliskan catatan, temuan, atau rekomendasi perbaikan..."
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                ></textarea>
+                            </div>
+
+                            {/* Submit Button */}
+                            <div className="flex gap-3">
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-1 gradient-bg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSubmitting ? 'Menyimpan...' : 'Simpan Evaluasi'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => window.location.reload()}
+                                    className="px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition"
+                                >
+                                    Reset
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    {/* Informasi Tambahan */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+                        <h3 className="font-semibold text-blue-900 mb-2">ℹ️ Informasi</h3>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                            <li>• Data evaluasi akan tersimpan secara otomatis ke Google Sheets</li>
+                            <li>• Pimpinan sekolah dapat mengakses dashboard untuk melihat hasil evaluasi</li>
+                            <li>• Pastikan semua aspek telah dinilai sebelum menyimpan</li>
+                        </ul>
+                    </div>
+                </div>
+            );
+        };
+
+        // Komponen Dashboard untuk Pimpinan
+        const DashboardPimpinan = ({ onLogout }) => {
+            const [data, setData] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [filter, setFilter] = useState('semua');
+
+            useEffect(() => {
+                loadData();
+            }, []);
+
+            const loadData = async () => {
+                setLoading(true);
+                try {
+                    // Simulasi load data dari Google Sheets
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Data dummy untuk demo
+                    const dummyData = [
+                        {
+                            id: 1,
+                            tanggal: '2024-11-01',
+                            namaEvaluator: 'Dr. Ahmad Hidayat',
+                            role: 'Kepala Sekolah',
+                            additionalInfo: 'Kepala Sekolah',
+                            persentase: 87.5,
+                            kategori: 'Sangat Baik',
+                            totalSkor: 35,
+                            maksimalSkor: 40
+                        },
+                        {
+                            id: 2,
+                            tanggal: '2024-11-05',
+                            namaEvaluator: 'Siti Nurhaliza, M.Pd',
+                            role: 'Guru',
+                            additionalInfo: 'Matematika',
+                            persentase: 72.5,
+                            kategori: 'Baik',
+                            totalSkor: 29,
+                            maksimalSkor: 40
+                        },
+                        {
+                            id: 3,
+                            tanggal: '2024-11-10',
+                            namaEvaluator: 'Budi Santoso',
+                            role: 'Pengawas',
+                            additionalInfo: 'Pengawas Sekolah',
+                            persentase: 65.0,
+                            kategori: 'Cukup',
+                            totalSkor: 26,
+                            maksimalSkor: 40
+                        },
+                        {
+                            id: 4,
+                            tanggal: '2024-11-12',
+                            namaEvaluator: 'Andi Wijaya',
+                            role: 'Siswa',
+                            additionalInfo: 'IX A',
+                            persentase: 78.0,
+                            kategori: 'Baik',
+                            totalSkor: 31,
+                            maksimalSkor: 40
+                        },
+                        {
+                            id: 5,
+                            tanggal: '2024-11-13',
+                            namaEvaluator: 'Hj. Fatimah',
+                            role: 'Komite Sekolah',
+                            additionalInfo: '-',
+                            persentase: 82.5,
+                            kategori: 'Baik',
+                            totalSkor: 33,
+                            maksimalSkor: 40
+                        }
+                    ];
+                    
+                    setData(dummyData);
+                } catch (error) {
+                    console.error('Error loading data:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const filteredData = filter === 'semua' ? data : data.filter(d => d.kategori === filter);
+
+            const calculateStats = () => {
+                if (data.length === 0) return { rata2: 0, tertinggi: 0, terendah: 0 };
+                
+                const persentases = data.map(d => d.persentase);
+                return {
+                    rata2: (persentases.reduce((a, b) => a + b, 0) / persentases.length).toFixed(2),
+                    tertinggi: Math.max(...persentases),
+                    terendah: Math.min(...persentases)
+                };
+            };
+
+            const stats = calculateStats();
+
+            return (
+                <div className="max-w-7xl mx-auto">
+                    <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">Dashboard Pimpinan</h2>
+                                <p className="text-gray-600">SMP Negeri 38 Maluku Tengah</p>
+                            </div>
+                            <button
+                                onClick={onLogout}
+                                className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+                            >
+                                Logout
+                            </button>
+                        </div>
+
+                        {loading ? (
+                            <div className="text-center py-12">
+                                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                                <p className="mt-4 text-gray-600">Memuat data...</p>
+                            </div>
+                        ) : (
+                            <>
+                                {/* Statistik */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-xl">
+                                        <p className="text-sm opacity-90 mb-1">Total Evaluasi</p>
+                                        <p className="text-3xl font-bold">{data.length}</p>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-xl">
+                                        <p className="text-sm opacity-90 mb-1">Rata-rata Skor</p>
+                                        <p className="text-3xl font-bold">{stats.rata2}%</p>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-xl">
+                                        <p className="text-sm opacity-90 mb-1">Skor Tertinggi</p>
+                                        <p className="text-3xl font-bold">{stats.tertinggi}%</p>
+                                    </div>
+                                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-6 rounded-xl">
+                                        <p className="text-sm opacity-90 mb-1">Skor Terendah</p>
+                                        <p className="text-3xl font-bold">{stats.terendah}%</p>
+                                    </div>
+                                </div>
+
+                                {/* Filter */}
+                                <div className="mb-6">
+                                    <label className="text-sm font-medium text-gray-700 mr-3">Filter Kategori:</label>
+                                    <select
+                                        value={filter}
+                                        onChange={(e) => setFilter(e.target.value)}
+                                        className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                                    >
+                                        <option value="semua">Semua</option>
+                                        <option value="Sangat Baik">Sangat Baik</option>
+                                        <option value="Baik">Baik</option>
+                                        <option value="Cukup">Cukup</option>
+                                        <option value="Kurang">Kurang</option>
+                                    </select>
+                                </div>
+
+                                {/* Tabel Data */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="bg-gray-100">
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">No</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Tanggal</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Nama</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Role</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Kelas/Mapel/Jabatan</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Skor</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Persentase</th>
+                                                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Kategori</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {filteredData.map((item, index) => (
+                                                <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
+                                                    <td className="px-4 py-3 text-sm text-gray-700">{index + 1}</td>
+                                                    <td className="px-4 py-3 text-sm text-gray-700">{item.tanggal}</td>
+                                                    <td className="px-4 py-3 text-sm text-gray-700 font-medium">{item.namaEvaluator}</td>
+                                                    <td className="px-4 py-3 text-sm">
+                                                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                                            {item.role}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-gray-700">{item.additionalInfo}</td>
+                                                    <td className="px-4 py-3 text-sm text-gray-700">{item.totalSkor}/{item.maksimalSkor}</td>
+                                                    <td className="px-4 py-3 text-sm font-semibold text-gray-700">{item.persentase}%</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                            item.kategori === 'Sangat Baik' ? 'bg-green-100 text-green-700' :
+                                                            item.kategori === 'Baik' ? 'bg-blue-100 text-blue-700' :
+                                                            item.kategori === 'Cukup' ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                            {item.kategori}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {filteredData.length === 0 && (
+                                    <div className="text-center py-12 text-gray-500">
+                                        Tidak ada data untuk kategori yang dipilih
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Info Google Sheets */}
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+                        <h3 className="font-semibold text-green-900 mb-2">📊 Akses Google Sheets</h3>
+                        <p className="text-sm text-green-800 mb-3">
+                            Data evaluasi tersimpan di Google Sheets dengan ID: <code className="bg-white px-2 py-1 rounded">{SHEET_ID}</code>
+                        </p>
+                        <a
+                            href={`https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-medium"
+                        >
+                            Buka Google Sheets
+                        </a>
+                    </div>
+                </div>
+            );
+        };
+
+        // Komponen Login
+        const LoginPage = ({ onLogin }) => {
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (password === ADMIN_PASSWORD) {
+                    onLogin();
+                } else {
+                    setError('Password salah!');
+                    setTimeout(() => setError(''), 3000);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-500 to-blue-600">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <h2 className="text-3xl font-bold text-gray-800 mb-2">Dashboard Pimpinan</h2>
+                            <p className="text-gray-600">SMP Negeri 38 Maluku Tengah</p>
+                        </div>
+                        
+                        <form onSubmit={handleSubmit}>
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Password
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    placeholder="Masukkan password"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    required
+                                />
+                            </div>
+                            
+                            {error && (
+                                <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            <button
+                                type="submit"
+                                className="w-full gradient-bg text-white py-3 px-6 rounded-lg font-semibold hover:opacity-90 transition"
+                            >
+                                Login
+                            </button>
+                        </form>
+
+                        <div className="mt-6 text-center">
+                            <p className="text-sm text-gray-600">
+                                Hanya untuk pimpinan sekolah yang berwenang
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main App Component
+        const App = () => {
+            const [currentPage, setCurrentPage] = useState('form'); // 'form', 'login', 'dashboard'
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [toast, setToast] = useState(null);
+
+            const handleSubmitSuccess = (notification) => {
+                setToast(notification);
+            };
+
+            const handleLogin = () => {
+                setIsAuthenticated(true);
+                setCurrentPage('dashboard');
+            };
+
+            const handleLogout = () => {
+                setIsAuthenticated(false);
+                setCurrentPage('form');
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 py-8 px-4">
+                    {/* Toast Notification */}
+                    {toast && (
+                        <Toast
+                            message={toast.message}
+                            type={toast.type}
+                            onClose={() => setToast(null)}
+                        />
+                    )}
+
+                    {/* Navigation */}
+                    {currentPage !== 'login' && (
+                        <div className="max-w-7xl mx-auto mb-6">
+                            <div className="bg-white rounded-xl shadow p-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setCurrentPage('form')}
+                                            className={`px-6 py-2 rounded-lg font-medium transition ${
+                                                currentPage === 'form'
+                                                    ? 'gradient-bg text-white'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            Form Evaluasi
+                                        </button>
+                                        {!isAuthenticated && (
+                                            <button
+                                                onClick={() => setCurrentPage('login')}
+                                                className="px-6 py-2 rounded-lg font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+                                            >
+                                                Login Dashboard
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-gray-600">
+                                        {new Date().toLocaleDateString('id-ID', { 
+                                            weekday: 'long', 
+                                            year: 'numeric', 
+                                            month: 'long', 
+                                            day: 'numeric' 
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Content */}
+                    {currentPage === 'form' && (
+                        <FormEvaluasi onSubmitSuccess={handleSubmitSuccess} />
+                    )}
+
+                    {currentPage === 'login' && (
+                        <LoginPage onLogin={handleLogin} />
+                    )}
+
+                    {currentPage === 'dashboard' && isAuthenticated && (
+                        <DashboardPimpinan onLogout={handleLogout} />
+                    )}
+
+                    {/* Footer */}
+                    <div className="max-w-7xl mx-auto mt-8 text-center text-sm text-gray-600">
+                        <p>© 2024 SMP Negeri 38 Maluku Tengah. Sistem Monitoring dan Evaluasi.</p>
+                    </div>
+                </div>
+            );
+        };
+
+        // Render App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
